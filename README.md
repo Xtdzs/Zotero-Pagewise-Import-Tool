@@ -5,7 +5,7 @@ This tool provides a method to import all papers from a certain paper search pag
 
 Currently, the `Zotero Connector` plugin in `Edge` is **unable** to import all papers from an `arXiv` search page with its one-click import feature. As shown in the screenshot below, out of fifty papers on one page, only up to three can be imported. 
 
-![img1](public\images\img1.png)
+![img1](images/img1.png)
 
 This limitation poses challenges for researchers in STEM fields when trying to retrieve all the latest papers in a specific domain, journal, or conference. This tool employs a crawler-based approach to effectively address this issue.
 
@@ -15,13 +15,13 @@ This limitation poses challenges for researchers in STEM fields when trying to r
 
   Open the tool, select the database website you want to retrieve from, and enter its corresponding number.
 
-  ![img1](public\images\img2.png)
+  ![img1](images\img2.png)
 
 - **STEP 2**:
 
   Enter the full URL of the website displaying the search results of the completed search for papers you wish to import into the tool, then it will automatically initiate the crawling process.
 
-  ![img1](public\images\img3.png)
+  ![img1](images\img3.png)
 
 - **STEP 3**:
 
