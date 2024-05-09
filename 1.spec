@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['award-certificate@2x.ico'],
+    icon=['icon.ico'],
 )
