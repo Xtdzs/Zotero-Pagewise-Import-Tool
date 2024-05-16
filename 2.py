@@ -5,6 +5,13 @@ import sys
 import asyncio
 from bs4 import BeautifulSoup
 
+import time
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+
 
 def start():
     print("=====================================")
@@ -20,12 +27,13 @@ def start():
 
 def search_page_import():
     print("-------------------------------------")
-    print("Please select the database to export (enter the number):")
+    print("Please select a database website to export (enter the number):")
     print("1. arXiv")
     print("2. X-MOL")
     print("3. PubMed")
     print("4. Nature")
-    print("<Press r to return><Press e to exit>")
+    print("5. SciSpace (ensure Google Chrome version is 124 or higher.)")
+    print("<Press r to return><Press e to exit the program>")
     print("-------------------------------------")
     export_format = sys.stdin.readline().strip()
     return export_format
@@ -152,6 +160,78 @@ async def get_nature_codes(url):
     return nature_codes
 
 
+def scroll_and_refresh(driver, scroll_pause_time, max_scrolls):
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    scrolls = 0
+    while scrolls < max_scrolls:
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(scroll_pause_time)
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+            break
+        last_height = new_height
+        scrolls += 1
+
+
+async def get_SciSpace_codes(url, start, end):
+    start = int(start)
+    end = int(end)
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument("--window-size=1920,1050")
+    options.add_argument(f'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
+    s = Service('chromedriver-win64-124/chromedriver.exe')
+    driver = webdriver.Chrome(service=s, options=options)
+    try:
+        driver.get(url)
+        paperNum = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.XPATH, "//th[contains(text(),'Papers (')]"))
+        )
+        num = int(paperNum[0].text[-3:-1])
+
+        patience = 3
+        cnt = 0
+
+        while num < end:
+            # Scroll down and refresh page content
+            scroll_and_refresh(driver, scroll_pause_time=1.5, max_scrolls=4)
+            paperNum = WebDriverWait(driver, 10000).until(
+                EC.presence_of_all_elements_located((By.XPATH, "//th[contains(text(),'Papers (')]"))
+            )
+            num1 = int(paperNum[0].text[-3:-1])
+            if num1 <= num:
+                cnt += 1
+            else:
+                cnt = 0
+            num = num1
+
+            if cnt >= patience:
+                break
+
+        if start > num:
+            print(f"Warning: The page contains a maximum of {num} papers, unable to retrieve from paper {start}!")
+            return 's<n'
+
+        doi_elements = driver.find_elements(By.XPATH, "//a[contains(@href,'doi.org')]")
+        dois = [element.get_attribute("href") for element in doi_elements]
+
+        driver.quit()
+
+        dois = dois[start - 1:min(num, end)]
+
+        print("DOI numbers have been copied to the clipboard! (in page order)")
+        if cnt >= patience:
+            print(f"Warning: The page contains a maximum of {num} papers, unable to retrieve up to paper {end}!")
+        return dois
+    except:
+        print("Scraping failed!")
+        return []
+
+
+
 def paper_page_import():
     print("-------------------------------------")
     print("Please select the database to export (enter the number):")
@@ -274,6 +354,30 @@ while True:
                     print("<Press any key to continue><Press r to return>")
                     inp = sys.stdin.readline().strip()
                     if inp == 'r' or inp == 'R':
+                        website_idx = search_page_import()
+                        continue
+                    else:
+                        continue
+                elif website_idx == '5':
+                    print("Please open the SciSpace search results page in your browser, then copy and paste the URL here:")
+                    url = sys.stdin.readline().strip()
+                    print("Please provide the DOI range of the papers to export (enter numbers):")
+                    print("Start (from which paper):")
+                    start = sys.stdin.readline().strip()
+                    print("End (to which paper):")
+                    end = sys.stdin.readline().strip()
+                    if int(start) > int(end):
+                        print("The start paper cannot be after the end paper!")
+                        continue
+                    print("Retrieving DOI numbers, please wait...")
+                    SciSpace_codes = asyncio.run(get_SciSpace_codes(url, start, end))
+                    if SciSpace_codes == 's<n':
+                        continue
+                    SciSpace_codes = '\n'.join(SciSpace_codes)
+                    pyperclip.copy(SciSpace_codes)
+                    print("<Press any key to continue><Press r to return>")
+                    inp = sys.stdin.readline().strip()
+                    if inp.lower() == 'r':
                         website_idx = search_page_import()
                         continue
                     else:

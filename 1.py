@@ -5,6 +5,16 @@ import sys
 import asyncio
 from bs4 import BeautifulSoup
 
+import time
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+
 
 def start():
     print("=====================================")
@@ -25,6 +35,7 @@ def search_page_import():
     print("2. X-MOL")
     print("3. PubMed")
     print("4. Nature")
+    print("5. SciSpace（确保谷歌浏览器版本大于等于124.）")
     print("<按r返回><按e退出程序>")
     print("-------------------------------------")
     export_format = sys.stdin.readline().strip()
@@ -152,6 +163,77 @@ async def get_nature_codes(url):
     return nature_codes
 
 
+def scroll_and_refresh(driver, scroll_pause_time, max_scrolls):
+    last_height = driver.execute_script("return document.body.scrollHeight")
+    scrolls = 0
+    while scrolls < max_scrolls:
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(scroll_pause_time)
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == last_height:
+            break
+        last_height = new_height
+        scrolls += 1
+
+
+async def get_SciSpace_codes(url, start, end):
+    start = int(start)
+    end = int(end)
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-gpu')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument("--window-size=1920,1050")
+    options.add_argument(f'user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
+    s = Service('chromedriver-win64-124/chromedriver.exe')
+    driver = webdriver.Chrome(service=s, options=options)
+    try:
+        driver.get(url)
+        paperNum = WebDriverWait(driver, 10000).until(
+            EC.presence_of_all_elements_located((By.XPATH, "//th[contains(text(),'Papers (')]"))
+        )
+        num = int(paperNum[0].text[-3:-1])
+
+        patience = 3
+        cnt = 0
+
+        while num < end:
+            # 下滑并刷新页面内容
+            scroll_and_refresh(driver, scroll_pause_time=1.5, max_scrolls=4)
+            paperNum = WebDriverWait(driver, 10000).until(
+                EC.presence_of_all_elements_located((By.XPATH, "//th[contains(text(),'Papers (')]"))
+            )
+            num1 = int(paperNum[0].text[-3:-1])
+            if num1 <= num:
+                cnt += 1
+            else:
+                cnt = 0
+            num = num1
+
+            if cnt >= patience:
+                break
+
+        if start > num:
+            print(f"warning：页面论文数最多仅有{num}篇，无法从第{start}篇获取！")
+            return 's<n'
+
+        doi_elements = driver.find_elements(By.XPATH, "//a[contains(@href,'doi.org')]")
+        dois = [element.get_attribute("href") for element in doi_elements]
+
+        driver.quit()
+
+        dois = dois[start - 1:min(num, end)]
+
+        print("已将DOI编号复制到剪切板！（按照页面顺序）")
+        if cnt >= patience:
+            print(f"warning：页面论文数最多仅有{num}篇，无法获取到第{end}篇！")
+        return dois
+    except:
+        print("爬取失败！")
+        return []
+
+
 def paper_page_import():
     print("-------------------------------------")
     print("请选择导出数据库网站（输入序号）：")
@@ -271,6 +353,30 @@ while True:
                     nature_codes = asyncio.run(get_nature_codes(url))
                     nature_codes = '\n'.join(nature_codes)
                     pyperclip.copy(nature_codes)
+                    print("<按任意键继续><按r返回>")
+                    inp = sys.stdin.readline().strip()
+                    if inp == 'r' or inp == 'R':
+                        website_idx = search_page_import()
+                        continue
+                    else:
+                        continue
+                elif website_idx == '5':
+                    print("请在浏览器中打开SciSpace的搜索结果页面，然后复制URL粘贴到此处：")
+                    url = sys.stdin.readline().strip()
+                    print("请给出需导出论文的DOI范围（输入数字）：")
+                    print("开始（从第几篇开始）：")
+                    start = sys.stdin.readline().strip()
+                    print("结束（从第几篇结束）：")
+                    end = sys.stdin.readline().strip()
+                    if start > end:
+                        print("开始篇不能在结束篇之后！")
+                        continue
+                    print("正在获取DOI编号，请稍等...")
+                    SciSpace_codes = asyncio.run(get_SciSpace_codes(url, start, end))
+                    if SciSpace_codes == 's<n':
+                        continue
+                    SciSpace_codes = '\n'.join(SciSpace_codes)
+                    pyperclip.copy(SciSpace_codes)
                     print("<按任意键继续><按r返回>")
                     inp = sys.stdin.readline().strip()
                     if inp == 'r' or inp == 'R':
